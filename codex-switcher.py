@@ -359,6 +359,7 @@ def stop_process(process: subprocess.Popen) -> None:
 def query_quota(root: Path, account_slot: str) -> Dict[str, Any]:
     """读取当前 Codex CLI app-server 的 rate-limit snapshot。"""
     home = account_home(root, account_slot)
+    identity = {"slot": account_slot, "email": account_email(home)}
     process = None
     try:
         process = subprocess.Popen(
@@ -381,28 +382,28 @@ def query_quota(root: Path, account_slot: str) -> Dict[str, Any]:
         initialize_response, stderr_lines = read_app_server(process, 1, 10)
         if initialize_response is None:
             detail = stderr_lines[-1] if stderr_lines else "初始化超时（10 秒）"
-            return {"slot": account_slot, "error": detail[:240]}
+            return {**identity, "error": detail[:240]}
         if initialize_response.get("error"):
             error = initialize_response["error"]
             message = error.get("message") if isinstance(error, dict) else str(error)
-            return {"slot": account_slot, "error": str(message)[:240]}
+            return {**identity, "error": str(message)[:240]}
         send_json(process, {"method": "initialized"})
         send_json(process, {"id": 2, "method": "account/rateLimits/read", "params": None})
         response, stderr_lines = read_app_server(process, 2, 20, accept_rate_update=True)
         if response is None:
             detail = stderr_lines[-1] if stderr_lines else "读取额度超时（20 秒）"
-            return {"slot": account_slot, "error": detail[:240]}
+            return {**identity, "error": detail[:240]}
     except (OSError, ValueError) as exc:
-        return {"slot": account_slot, "error": "app-server 通信失败：%s" % exc}
+        return {**identity, "error": "app-server 通信失败：%s" % exc}
     finally:
         if process is not None:
             stop_process(process)
     if response.get("error"):
         error = response["error"]
         message = error.get("message") if isinstance(error, dict) else str(error)
-        return {"slot": account_slot, "error": str(message)[:240]}
+        return {**identity, "error": str(message)[:240]}
     result = response.get("result")
-    return {"slot": account_slot, "result": result} if isinstance(result, dict) else {"slot": account_slot, "error": "额度响应格式不受支持。"}
+    return {**identity, "result": result} if isinstance(result, dict) else {**identity, "error": "额度响应格式不受支持。"}
 
 
 def buckets(result: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
@@ -415,10 +416,10 @@ def buckets(result: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
     return [("codex", single)] if isinstance(single, dict) else []
 
 
-def reset_at(value: Any) -> str:
+def reset_at(value: Any, date_format: str = "%m-%d %H:%M") -> str:
     try:
         timestamp = int(value)
-        return datetime_module.datetime.fromtimestamp(timestamp).strftime("%m-%d %H:%M") if timestamp > 0 else "未知"
+        return datetime_module.datetime.fromtimestamp(timestamp).strftime(date_format) if timestamp > 0 else "未知"
     except (TypeError, ValueError, OverflowError, OSError):
         return "未知"
 
@@ -436,7 +437,7 @@ def window_line(name: str, window: Dict[str, Any]) -> str:
 
 
 def quota_text(snapshot: Dict[str, Any], active: bool) -> List[str]:
-    title = "账号 %s%s" % (snapshot["slot"], " [当前]" if active else "")
+    title = "%s%s" % (account_title(snapshot), " [当前]" if active else "")
     lines = [title]
     if snapshot.get("error"):
         lines.append("  状态：%s" % snapshot["error"])
@@ -458,7 +459,15 @@ def quota_text(snapshot: Dict[str, Any], active: bool) -> List[str]:
                 lines.append("  credits：%s" % credits["balance"])
     reset_credits = result.get("rateLimitResetCredits")
     if isinstance(reset_credits, dict):
-        lines.append("  可用重置次数：%s" % reset_credits.get("availableCount", 0))
+        count = reset_credits.get("availableCount", 0)
+        lines.append("  可用重置次数：%s" % count)
+        details = reset_credits.get("credits")
+        credits = [item for item in details if isinstance(item, dict)] if isinstance(details, list) else []
+        for index, credit in enumerate(credits, 1):
+            expiry = "永不过期" if "expiresAt" in credit and credit["expiresAt"] is None else reset_at(credit.get("expiresAt"), "%Y-%m-%d %H:%M")
+            lines.append("    重置 %s 到期：%s" % (index, expiry))
+        if isinstance(count, int) and count > len(credits):
+            lines.append("    %s重置到期时间：接口未返回" % ("其余" if credits else ""))
     if not all_buckets:
         lines.append("  状态：没有可用额度窗口")
     return lines

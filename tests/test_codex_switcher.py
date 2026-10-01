@@ -96,6 +96,29 @@ class CodexSwitcherTests(unittest.TestCase):
         self.assertTrue(any("5 小时" in line and "剩余 75%" in line for line in lines))
         self.assertTrue(any("每周" in line and "剩余 60%" in line for line in lines))
 
+    def test_quota_reset_credit_expiry(self):
+        expiry = module.datetime_module.datetime(2026, 11, 1, 12, 30)
+        summary = {"availableCount": 4, "credits": [
+            {"expiresAt": int(expiry.timestamp())},
+            {"expiresAt": None},
+            {},
+        ]}
+        snapshot = {"slot": "1", "result": {"rateLimits": {}, "rateLimitResetCredits": summary}}
+        lines = module.quota_text(snapshot, False)
+        self.assertIn("  可用重置次数：4", lines)
+        self.assertIn("    重置 1 到期：2026-11-01 12:30", lines)
+        self.assertIn("    重置 2 到期：永不过期", lines)
+        self.assertIn("    重置 3 到期：未知", lines)
+        self.assertIn("    其余重置到期时间：接口未返回", lines)
+
+    def test_quota_reset_credit_details_unavailable(self):
+        for details in (None, []):
+            summary = {"availableCount": 4, "credits": details}
+            snapshot = {"slot": "1", "result": {"rateLimits": {}, "rateLimitResetCredits": summary}}
+            self.assertIn("    重置到期时间：接口未返回", module.quota_text(snapshot, False))
+        summary["availableCount"] = 0
+        self.assertNotIn("    重置到期时间：接口未返回", module.quota_text(snapshot, False))
+
     def test_account_email_reads_id_token_profile(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -110,6 +133,12 @@ class CodexSwitcherTests(unittest.TestCase):
             }
             (home / module.AUTH_FILE).write_text(json.dumps(auth), encoding="utf-8")
             self.assertEqual(module.account_email(home), "one@example.com")
+
+    def test_quota_title_includes_email_and_current_marker(self):
+        snapshot = {"slot": "1", "email": "one@example.com", "result": {}}
+        self.assertEqual(module.quota_text(snapshot, True)[0], "账号 1（one@example.com） [当前]")
+        self.assertEqual(module.quota_text(snapshot, False)[0], "账号 1（one@example.com）")
+        self.assertEqual(module.quota_text({"slot": "2", "result": {}}, False)[0], "账号 2")
 
     def test_status_text_includes_email(self):
         root = Path(tempfile.mkdtemp())
@@ -302,9 +331,9 @@ class CodexSwitcherTests(unittest.TestCase):
         ]
         with patch.object(module.subprocess, "Popen", return_value=process), patch.object(
             module, "read_app_server", side_effect=responses
-        ):
+        ), patch.object(module, "account_email", return_value="one@example.com"):
             result = module.query_quota(Path("/tmp/cxs-test"), "1")
-        self.assertEqual(result, {"slot": "1", "result": {"rateLimits": {}}})
+        self.assertEqual(result, {"slot": "1", "email": "one@example.com", "result": {"rateLimits": {}}})
         messages = [json.loads(line) for line in process.stdin.payload.splitlines()]
         self.assertEqual(messages[0]["method"], "initialize")
         self.assertNotIn("params", messages[1])

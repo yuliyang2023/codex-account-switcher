@@ -54,6 +54,16 @@ git clone https://github.com/yuliyang2023/codex-account-switcher.git \
 source "$HOME/.zsh/plugins/codex-account-switcher/codex-account-switcher.plugin.zsh"
 ```
 
+更新插件并重新加载：
+
+```zsh
+git -C "$HOME/.zsh/plugins/codex-account-switcher" pull --ff-only
+source "$HOME/.zsh/plugins/codex-account-switcher/codex-account-switcher.plugin.zsh"
+```
+
+如果安装在其他目录，将命令中的路径替换为实际安装目录。更新无需重新登录账号；
+`cxs quota` 每次执行都会读取安装目录中的 Python 脚本，更新脚本后即可使用新的额度输出。
+
 两种方式均提供 `cxs` 和 `codex` 函数；`codex` 会使用切换工具选定的账号。
 插件入口采用标准的 `<插件名>.plugin.zsh` 文件名，安装约定参考
 [Oh My Zsh 自定义插件文档](https://github.com/ohmyzsh/ohmyzsh/wiki/Customization#overriding-and-adding-plugins)。
@@ -136,7 +146,7 @@ cxs resume 2
 | login 2 | 设备码登录账号 2 |
 | login 3 --browser-auth | 添加并登录账号 3；可使用更多正整数编号 |
 | status | 查看账号状态和邮箱，不显示令牌 |
-| quota | 查询全部账号的额度，依赖 CLI app-server 接口 |
+| quota | 查询全部账号的额度、邮箱和可用重置的到期时间，依赖 CLI app-server 接口 |
 | quota 3 | 只查询账号 3 的额度 |
 | use 2 | 设置下一次启动使用账号 2 |
 | run | 启动新会话 |
