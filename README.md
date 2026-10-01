@@ -4,6 +4,60 @@
 各账号的凭据分别保存，运行时共用一个 CODEX_HOME；切换后可以继续原会话。
 账号编号支持任意正整数（1、2、3……），没有两个账号的数量限制。
 
+## Zsh 插件安装
+
+需要已安装 Python 3.8+ 和 Codex CLI。插件加载时只定义命令，不自动登录或切换账号。
+
+### Oh My Zsh
+
+```zsh
+git clone https://github.com/yuliyang2023/codex-account-switcher.git \
+  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/codex-account-switcher"
+```
+
+在 `~/.zshrc` 已有的 `plugins=(...)` 中添加 `codex-account-switcher`，保留其他插件，例如：
+
+```zsh
+plugins=(git codex-account-switcher)
+```
+
+插件列表应放在 `source "$ZSH/oh-my-zsh.sh"` 前。打开新终端或执行 `exec zsh` 后使用：
+
+```zsh
+cxs init
+cxs import 1 --yes
+cxs login 2 --browser-auth
+cxs login 3 --browser-auth
+cxs use 3
+codex
+```
+
+更新插件：
+
+```zsh
+git -C "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/codex-account-switcher" pull --ff-only
+```
+
+更新后打开新终端。卸载时从 `plugins=(...)` 删除 `codex-account-switcher` 并打开新终端；
+账号凭据仍保存在 `~/.codex-switcher`。
+
+### 普通 Zsh（无需 Oh My Zsh）
+
+```zsh
+git clone https://github.com/yuliyang2023/codex-account-switcher.git \
+  "$HOME/.zsh/plugins/codex-account-switcher"
+```
+
+将下面一行添加到 `~/.zshrc`，再打开新终端：
+
+```zsh
+source "$HOME/.zsh/plugins/codex-account-switcher/codex-account-switcher.plugin.zsh"
+```
+
+两种方式均提供 `cxs` 和 `codex` 函数；`codex` 会使用切换工具选定的账号。
+插件入口采用标准的 `<插件名>.plugin.zsh` 文件名，安装约定参考
+[Oh My Zsh 自定义插件文档](https://github.com/ohmyzsh/ohmyzsh/wiki/Customization#overriding-and-adding-plugins)。
+
 ## 开始使用
 
 在工具目录执行（如果放到了其他机器，先解压并进入该目录）：

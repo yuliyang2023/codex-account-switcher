@@ -182,13 +182,14 @@ class CodexSwitcherTests(unittest.TestCase):
             self.assertEqual((home / module.AUTH_FILE).read_text(), original)
 
     def test_shell_resume_switches_to_third_account(self):
-        for shell in ("bash", "zsh"):
+        for shell, entry in (("bash", "codex-switcher.zsh"), ("zsh", "codex-switcher.zsh"),
+                             ("zsh", "codex-account-switcher.plugin.zsh")):
             if not shutil.which(shell):
                 continue
-            with self.subTest(shell=shell), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(shell=shell, entry=entry), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / "switcher"
                 shared = Path(directory) / "shared"
-                source = path.parent / "codex-switcher.zsh"
+                source = path.parent / entry
                 module.init_layout(root)
                 home = module.account_home(root, "3")
                 home.mkdir()
@@ -208,6 +209,27 @@ class CodexSwitcherTests(unittest.TestCase):
                                         env=environment, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(module.current_slot(root), "3")
+
+    @unittest.skipUnless(shutil.which("zsh"), "Zsh is not installed")
+    def test_plugin_loads_from_custom_directory_without_creating_account_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            plugin = Path(directory) / "custom plugins" / "codex-account-switcher"
+            plugin.mkdir(parents=True)
+            for name in ("codex-account-switcher.plugin.zsh", "codex-switcher.zsh", "codex-switcher.py"):
+                shutil.copy2(path.parent / name, plugin / name)
+            root = Path(directory) / "account-data"
+            environment = os.environ.copy()
+            environment["CODEX_SWITCHER_HOME"] = str(root)
+            result = subprocess.run(["zsh", "-f", "-c",
+                'load_plugin() { source "$1"; }; load_plugin "$1" || exit; '
+                'source "$1" || exit; '
+                '(( $+functions[cxs] && $+functions[codex] )) || exit 1; '
+                'test "$CODEX_SWITCHER_BIN" = "${2:A}/codex-switcher.py" || exit; '
+                'cxs login --help', "cxs-test", str(plugin / "codex-account-switcher.plugin.zsh"), str(plugin)],
+                env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("账号编号", result.stdout)
+            self.assertFalse(root.exists())
 
     def test_missing_credentials_does_not_replace_runtime_auth(self):
         with tempfile.TemporaryDirectory() as directory:
