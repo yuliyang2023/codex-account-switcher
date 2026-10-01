@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Local account credentials and agent configuration.
+.codex/
+.agents/
+.codex-switcher/
+auth.json
+auth.before-switcher.json
